@@ -1,3 +1,6 @@
+﻿from __future__ import division
+from __future__ import with_statement
+import binascii
 import copy
 import functools
 import json
@@ -11,16 +14,17 @@ import uuid
 import warnings
 import weakref
 from contextlib import closing
-from http.cookiejar import Cookie, CookieJar
+from cookielib import Cookie, CookieJar
 from pprint import pprint
-from urllib.error import HTTPError
-from urllib.parse import urljoin, urlencode, urlparse
-from urllib.request import build_opener, HTTPCookieProcessor, Request
+from urllib2 import HTTPError
+from urllib import urlencode
+from urlparse import urljoin, urlparse
+from urllib2 import build_opener, HTTPCookieProcessor, Request
 
-__all__ = ["Workflowy", "WeakWorkflowy"]
+__all__ = [u"Workflowy", u"WeakWorkflowy"]
 
-DEFAULT_WORKFLOWY_URL = "https://workflowy.com/"
-DEFAULT_ROOT_NODE_ID = "None"
+DEFAULT_WORKFLOWY_URL = u"https://workflowy.com/"
+DEFAULT_ROOT_NODE_ID = u"None"
 FEATURE_XXX_PRO_USER = False
 FEATURE_XXX_QUOTA = False
 # Change FEATURE_XXX_PRO_USER are does nothing. just define more empty classes only.
@@ -31,25 +35,30 @@ OPERATOR_COLLECTION = {}
 # WFOperation collection.
 
 def gen_uuid():
-    return str(uuid.UUID(bytes=os.urandom(16)))
+    print binascii.hexlify(os.urandom(16))
+    return unicode(uuid.UUID(binascii.hexlify(os.urandom(16))))
 
 IDENTIFY_TID = string.digits + string.ascii_letters
 def gen_tid():
     # TODO: make this
-    return "".join(random.choice(IDENTIFY_TID) for i in range(8))
+    return u"".join(random.choice(IDENTIFY_TID) for i in xrange(8))
 
 
-class Browser():
+class Browser(object):
     def __init__(self, base_url):
         self.cookie_jar = CookieJar()
         self.opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
         self.base_url = base_url
 
-    def open(self, url, *, _is_json=True, _raw=False, **kwargs):
+    def open(self, url, **kwargs):
+        if '_raw' in kwargs: _raw = kwargs['_raw']; del kwargs['_raw']
+        else: _raw = False
+        if '_is_json' in kwargs: _is_json = kwargs['_is_json']; del kwargs['_is_json']
+        else: _is_json = True
         url = urljoin(self.base_url, url)
         data = urlencode(kwargs).encode()
         headers = {
-            "Content-Type" : "application/x-www-form-urlencoded",
+            u"Content-Type" : u"application/x-www-form-urlencoded",
         }
 
         req = Request(url, data, headers)
@@ -95,7 +104,7 @@ class Browser():
 
 class attrdict(dict):
     def __init__(self, *args, **kwargs):
-          super().__init__(*args, **kwargs)
+          super(self.__class__, self).__init__(*args, **kwargs)
           self.__dict__ = self
 
 
@@ -115,12 +124,12 @@ class WFOverflowError(WFError, OverflowError):
     pass
 
 
-class WFOperation():
+class WFOperation(object):
     operation_name = NotImplemented
 
     def __init__(self, node):
         if self.operation_name is NotImplemented:
-            raise NotImplementedError("operation_name are NotImplemented.")
+            raise NotImplementedError(u"operation_name are NotImplemented.")
 
         self.node = node
         raise NotImplementedError
@@ -128,7 +137,7 @@ class WFOperation():
 
     def __repr__(self):
         # const name?
-        return "<WFOperation: %s; %r>" % (self.operation_name, vars(self))
+        return u"<WFOperation: %s; %r>" % (self.operation_name, vars(self))
 
     def pre_operation(self, tr):
         pass
@@ -191,9 +200,9 @@ class WFOperation():
         DEFAULT = object()
         # Sorry, projectid can be None.
 
-        projectid = op.data.pop("projectid", DEFAULT)
+        projectid = op.data.pop(u"projectid", DEFAULT)
         if projectid is not DEFAULT:
-            op.data["node"] = tr.wf.nodes[projectid]
+            op.data[u"node"] = tr.wf.nodes[projectid]
             # if not exist node, raise error?
 
         return op
@@ -208,7 +217,7 @@ class WFOperation():
 
 
 class _WFUnknownOperation(WFOperation):
-    operation_name = "_unknown"
+    operation_name = u"_unknown"
 
     def __init__(self, op):
         self.op = op
@@ -222,15 +231,15 @@ class _WFUnknownOperation(WFOperation):
         return self.op.data
 
     def __repr__(self):
-        return "<_WFUnknownOperation: %s; %r>" % (self.operation_name, self.data)
+        return u"<_WFUnknownOperation: %s; %r>" % (self.operation_name, self.data)
 
     def pre_operation(self, tr):
         pass
 
     def post_operation(self, tr):
         # TODO: how to warning?
-        warnings.warn("Unknown %s operation detected." % self.operation_name)
-        print(self)
+        warnings.warn(u"Unknown %s operation detected." % self.operation_name)
+        print self
 
     def get_operation(self, tr):
         operation = dict(
@@ -262,7 +271,7 @@ class _WFUnknownOperation(WFOperation):
 
 
 class WF_EditOperation(WFOperation):
-    operation_name = 'edit'
+    operation_name = u'edit'
 
     def __init__(self, node, name=None, description=None):
         self.node = node
@@ -299,7 +308,7 @@ class WF_EditOperation(WFOperation):
 
 
 class WF_CreateOperation(WFOperation):
-    operation_name = 'create'
+    operation_name = u'create'
 
     def __init__(self, parent, node, priority):
         self.parent = parent
@@ -365,31 +374,31 @@ class _WF_CompleteNodeOperation(WFOperation):
 
 
 class WF_CompleteOperation(_WF_CompleteNodeOperation):
-    operation_name = 'complete'
+    operation_name = u'complete'
 
     def __init__(self, node):
-        super().__init__(node)
+        super(self.__class__, self).__init__(node)
         self.modified = None
 
     def pre_operation(self, tr):
-        super().pre_operation(tr)
+        super(self.__class__, self).pre_operation(tr)
         if self.modified is None:
             self.modified = tr.get_client_timestamp()
 
     def post_operation(self, tr):
-        super().post_operation(tr)
+        super(self.__class__, self).post_operation(tr)
         self.node.cp = None
 
 
 class WF_UncompleteOperation(_WF_CompleteNodeOperation):
-    operation_name = 'uncomplete'
+    operation_name = u'uncomplete'
 
     def post_operation(self, tr):
         self.node.cp = None
 
 
 class WF_DeleteOperation(WFOperation):
-    operation_name = 'delete'
+    operation_name = u'delete'
 
     def __init__(self, node):
         self.parent = node.parent
@@ -423,14 +432,14 @@ class WF_DeleteOperation(WFOperation):
 
 
 class WF_UndeleteOperation(WFOperation):
-    operation_name = 'undelete'
+    operation_name = u'undelete'
 
     def __init__(self):
-        raise NotImplementedError("Just don't do that. :P")
+        raise NotImplementedError(u"Just don't do that. :P")
 
 
 class WF_MoveOperation(WFOperation):
-    operation_name = 'move'
+    operation_name = u'move'
 
     def __init__(self, parent, node, priority):
         self.parent = parent
@@ -440,9 +449,9 @@ class WF_MoveOperation(WFOperation):
     def pre_operation(self, tr):
         tr.wf.check_exist_node(self.node)
         if self.node.parent is None:
-            raise WFNodeError("{!r} don't have parent. (possible?)".format(self.node))
+            raise WFNodeError(u"{!r} don't have parent. (possible?)".format(self.node))
         elif self.node not in self.node.parent:
-            raise WFNodeError("{!r} not have {!r}".format(self.parent, self.node))
+            raise WFNodeError(u"{!r} not have {!r}".format(self.parent, self.node))
 
     def post_operation(self, tr):
         self.node.parent.remove(self.node)
@@ -468,8 +477,8 @@ class WF_MoveOperation(WFOperation):
 
     @classmethod
     def prepare_server_operation_json(cls, tr, op):
-        op = super().pre_operation(tr, op)
-        op.data["parent"] = op.data.pop("parentid")
+        op = super(cls.__class__, cls).pre_operation(tr, op)
+        op.data[u"parent"] = op.data.pop(u"parentid")
         return op
 
     @classmethod
@@ -478,10 +487,10 @@ class WF_MoveOperation(WFOperation):
 
 
 class WF_ShareOperation(WFOperation):
-    operation_name = 'share'
+    operation_name = u'share'
 
-    def __init__(self, node, share_type="url", write_permission=False):
-        assert share_type == "url"
+    def __init__(self, node, share_type=u"url", write_permission=False):
+        assert share_type == u"url"
         self.node = node
         self.share_type = share_type
         self.write_permission = False
@@ -504,15 +513,15 @@ class WF_ShareOperation(WFOperation):
                 previous_share_type=None,
                 previous_write_permission=None,
             )
-        elif "url_shared_info" in shared:
-            url_shared = shared["url_shared_info"]
+        elif u"url_shared_info" in shared:
+            url_shared = shared[u"url_shared_info"]
             return dict(
-                previous_share_type="url",
-                previous_write_permission=url_shared.get("write_permission"),
+                previous_share_type=u"url",
+                previous_write_permission=url_shared.get(u"write_permission"),
             )
 
 class WF_UnshareOperation(WFOperation):
-    operation_name = 'unshare'
+    operation_name = u'unshare'
 
     def __init__(self, node):
         self.node = node
@@ -537,41 +546,41 @@ class WF_UnshareOperation(WFOperation):
 
 
 class WF_BulkCreateOperation(WFOperation):
-    operation_name = 'bulk_create'
+    operation_name = u'bulk_create'
 
 
 class WF_BulkMoveOperation(WFOperation):
-    operation_name = 'bulk_move'
+    operation_name = u'bulk_move'
 
 
 if FEATURE_XXX_PRO_USER:
     class WF_AddSharedEmailOperation(WFOperation):
-        operation_name = 'add_shared_email'
+        operation_name = u'add_shared_email'
 
 
     class WF_RemoveSharedEmailOperation(WFOperation):
-        operation_name = 'remove_shared_email'
+        operation_name = u'remove_shared_email'
 
 
     class WF_RegisterSharedEmailUserOperation(WFOperation):
-        operation_name = 'register_shared_email_user'
+        operation_name = u'register_shared_email_user'
 
 
     class WF_MakeSharedSubtreePlaceholderOperation(WFOperation):
-        operation_name = 'make_shared_subtree_placeholder'
+        operation_name = u'make_shared_subtree_placeholder'
 
 
-class WFBaseNode():
+class WFBaseNode(object):
     # this class for fixing weakref for WF_WNode.
     # http://stackoverflow.com/questions/24407874/inherit-class-with-weakref-in-slots
-    __slots__  = ["id", "lm", "nm", "ch", "no", "cp", "shared", "parent", "__weakref__"]
+    __slots__  = [u"id", u"lm", u"nm", u"ch", u"no", u"cp", u"shared", u"parent", u"__weakref__"]
 
 class WFNode(WFBaseNode):
     __slots__ = []
 
-    def __init__(self, id, lm=0, nm="", ch=None, no="", cp=None, shared=None, parent=None):
+    def __init__(self, id, lm=0, nm=u"", ch=None, no=u"", cp=None, shared=None, parent=None):
         if isinstance(id, uuid.UUID):
-            id = str(id)
+            id = unicode(id)
 
         self.id = id # UUID or "None"(DEFAULT_ROOT_NODE_ID)
         self.lm = lm # ?
@@ -587,10 +596,10 @@ class WFNode(WFBaseNode):
             child.parent = self
 
     def __repr__(self):
-        return "<WFNode({id!r})>".format(clsname = type(self).__name__, id = self.id)
+        return u"<WFNode({id!r})>".format(clsname = type(self).__name__, id = self.id)
 
     def __str__(self):
-        return "{clsname}(id={id!r}, lm={lm!r}, nm={nm!r}, ch={ch!r}, no={no!r}, cp={cp!r}{_shared})".format(
+        return u"{clsname}(id={id!r}, lm={lm!r}, nm={nm!r}, ch={ch!r}, no={no!r}, cp={cp!r}{_shared})".format(
             clsname = type(self).__name__,
             id = self.id,
             lm = self.lm,
@@ -598,11 +607,11 @@ class WFNode(WFBaseNode):
             ch = self.ch,
             no = self.no,
             cp = self.cp,
-            _shared = ", shared={!r}".format(self.shared) if self.shared is not None else "",
+            _shared = u", shared={!r}".format(self.shared) if self.shared is not None else u"",
         )
 
     def ready_ch(self):
-        "put list to ch. only internal use."
+        u"put list to ch. only internal use."
 
         if self.ch is None:
             self.ch = []
@@ -613,14 +622,14 @@ class WFNode(WFBaseNode):
 
     def insert(self, index, node):
         if node.parent is not None:
-            raise WFNodeError("not allow copy child, use api.")
+            raise WFNodeError(u"not allow copy child, use api.")
             # TODO: remove bad english. :(
 
         self.ready_ch()
         self.ch.insert(index, node)
         node.parent = self
 
-    def __bool__(self):
+    def __nonzero__(self):
         return len(self) > 0
 
     def __len__(self):
@@ -645,21 +654,25 @@ class WFNode(WFBaseNode):
 
         return self.ch[item]
 
-    def pretty_print(self, *, stream=None, indent=0):
+    def pretty_print(self, **_3to2kwargs):
+        if 'indent' in _3to2kwargs: indent = _3to2kwargs['indent']; del _3to2kwargs['indent']
+        else: indent = 0
+        if 'stream' in _3to2kwargs: stream = _3to2kwargs['stream']; del _3to2kwargs['stream']
+        else: stream = None
         if stream is None:
             stream = sys.stdout
 
         INDENT_SIZE = 2
-        p = lambda *args: print(" "*indent + " ".join(args), file=stream)
+        #p = lambda *args: print >>stream, u" "*indent + u" ".join(args)
 
         is_empty_root = self.id == DEFAULT_ROOT_NODE_ID and not self.nm and indent == 0
         if is_empty_root:
-            p("[*]", "Home")
+            print u"[*]" + u"Home"
         else:
-            p("[%s]" % (self.cp and "-" or " ",), self.nm, "{%s} " % self.id)
+            print str(self.cp) + str(self.nm) + str(self.id)
 
         for line in self.no.splitlines():
-            p(line)
+            print line
 
         indent += INDENT_SIZE
         for child in self:
@@ -669,23 +682,23 @@ class WFNode(WFBaseNode):
     def from_json(cls, data, parent=None):
         data = data.copy()
 
-        ch = data.get("ch")
+        ch = data.get(u"ch")
         if ch is not None:
             new_ch = []
             for child in ch:
                 child = cls.from_json(child)
                 new_ch.append(child)
-            data["ch"] = new_ch
+            data[u"ch"] = new_ch
 
         if parent:
-            data["parent"] = parent
+            data[u"parent"] = parent
 
         return cls(**data)
 
     @classmethod
     def from_root(cls, info):
-        root = info["rootProject"]
-        child = info["rootProjectChildren"]
+        root = info[u"rootProject"]
+        child = info[u"rootProjectChildren"]
         if root is None:
             root = dict(id=DEFAULT_ROOT_NODE_ID)
         else:
@@ -705,12 +718,12 @@ class WF_WeakNode(WFNode):
     __slots__ = []
 
     def __getattr__(self, item):
-        if not item.startswith("_") and item in dir(WFOperationCollection):
+        if not item.startswith(u"_") and item in dir(WFOperationCollection):
             return functools.partial(getattr(self._wf, item), self)
 
         raise AttributeError(item)
 
-class WFBaseTransaction():
+class WFBaseTransaction(object):
     is_executed = False
 
     def __init__(self, wf):
@@ -756,14 +769,14 @@ class WFBaseTransaction():
 
 class WFServerTransaction(WFBaseTransaction):
     def __init__(self, wf, client_tr, client_timestamp):
-        super().__init__(wf)
+        super(self.__class__, self).__init__(wf)
         self.client_timestamp = client_timestamp
         self.client_transaction = client_tr
 
     @classmethod
     def from_server_operations(cls, wf, client_tr, data):
         # TODO: from_server_operations method-name is not good.
-        client_timestamp = data["client_timestamp"]
+        client_timestamp = data[u"client_timestamp"]
         self = cls(wf, client_tr, client_timestamp)
 
         client_operations = self.get_client_operations_json()
@@ -771,8 +784,8 @@ class WFServerTransaction(WFBaseTransaction):
         # TODO: change pop function.
         current_client_operation = pop()
 
-        for op in data["ops"]:
-            op.pop("server_data", None)
+        for op in data[u"ops"]:
+            op.pop(u"server_data", None)
             # server_data are exists when server_info
 
             if current_client_operation == op:
@@ -780,7 +793,7 @@ class WFServerTransaction(WFBaseTransaction):
                 current_client_operation = pop()
                 continue
 
-            operator = OPERATOR_COLLECTION.get(op["type"], _WFUnknownOperation)
+            operator = OPERATOR_COLLECTION.get(op[u"type"], _WFUnknownOperation)
             operation = operator.from_server_operation_json(self, op)
             self.push(operation)
 
@@ -846,7 +859,7 @@ class WFClientTransaction(WFBaseTransaction):
         # TODO: move shared project process code.
         status = self.wf.status
         if status.share_type is not None:
-            assert status.share_type == "url"
+            assert status.share_type == u"url"
             share_id = status.share_id
             transaction.update(
                 share_id=share_id,
@@ -893,7 +906,7 @@ if FEATURE_XXX_QUOTA:
 
         @classmethod
         def from_main_project(cls, info):
-            return cls(info["itemsCreatedInCurrentMonth"], info["monthlyItemQuota"])
+            return cls(info[u"itemsCreatedInCurrentMonth"], info[u"monthlyItemQuota"])
 
         @classmethod
         def build_empty(cls):
@@ -908,17 +921,17 @@ if FEATURE_XXX_QUOTA:
         def __iadd__(self, other):
             self.used += other
             if self.is_overflow():
-                raise WFOverflowError("monthly item quota reached.")
+                raise WFOverflowError(u"monthly item quota reached.")
             return self
 
         def __isub__(self, other):
             self.used -= other
             if self.used < 0:
-                warnings.warn("while calculate workflowy quota, underflow are detected.")
+                warnings.warn(u"while calculate workflowy quota, underflow are detected.")
             return self
 
 
-class BaseWorkflowy():
+class BaseWorkflowy(object):
     NODE_CLASS = NotImplemented
     CLIENT_TRANSACTION_CLASS = NotImplemented
     SERVER_TRANSACTION_CLASS = NotImplemented
@@ -930,7 +943,7 @@ class BaseWorkflowy():
     def transaction(self):
         raise NotImplementedError
 
-class WFOperationCollection():
+class WFOperationCollection(object):
     NODE_CLASS = WFNode
 
     # TODO: add expend node. (not operation.)
@@ -940,13 +953,15 @@ class WFOperationCollection():
         with self.transaction() as tr:
             tr += WF_EditOperation(node, name, description)
 
-    def create(self, parent, priority=-1, *, node=None):
-        priority_range = range(len(parent) + 1)
+    def create(self, parent, priority=-1, **_3to2kwargs):
+        if 'node' in _3to2kwargs: node = _3to2kwargs['node']; del _3to2kwargs['node']
+        else: node = None
+        priority_range = xrange(len(parent) + 1)
 
         try:
             priority = priority_range[priority]
         except IndexError:
-            raise WFError("invalid priority are selected. (just use default value.)")
+            raise WFError(u"invalid priority are selected. (just use default value.)")
 
         # XXX: this class don't have workflowy, NODE_CLASS must have workflowy api? IDK...
         node = self.NODE_CLASS.from_void() if node is None else node
@@ -1012,7 +1027,9 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def print_status(self):
         pprint(vars(self), width=240)
 
-    def transaction(self, *, force_new_transaction=False):
+    def transaction(self, **_3to2kwargs):
+        if 'force_new_transaction' in _3to2kwargs: force_new_transaction = _3to2kwargs['force_new_transaction']; del _3to2kwargs['force_new_transaction']
+        else: force_new_transaction = False
         with self.lock:
             if self.current_transaction is None:
                 self.current_transaction = self.CLIENT_TRANSACTION_CLASS(self)
@@ -1024,22 +1041,26 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
             return self.current_transaction
 
-    def login(self, username_or_sessionid, password=None, *, auto_init=True, use_ajax_login=True):
+    def login(self, username_or_sessionid, password=None, **_3to2kwargs):
+        if 'use_ajax_login' in _3to2kwargs: use_ajax_login = _3to2kwargs['use_ajax_login']; del _3to2kwargs['use_ajax_login']
+        else: use_ajax_login = True
+        if 'auto_init' in _3to2kwargs: auto_init = _3to2kwargs['auto_init']; del _3to2kwargs['auto_init']
+        else: auto_init = True
         home_content = None
 
         if password is None:
             session_id = username_or_sessionid
-            self.browser.set_cookie("sessionid", session_id)
+            self.browser.set_cookie(u"sessionid", session_id)
         else:
             username = username_or_sessionid
             if use_ajax_login:
-                res, data = self.browser["ajax_login"](username=username, password=password)
-                errors = data.get("errors")
+                res, data = self.browser[u"ajax_login"](username=username, password=password)
+                errors = data.get(u"errors")
                 if errors:
                     # 'errors' or 'success'
-                    raise WFLoginError("Login Failure.")
+                    raise WFLoginError(u"Login Failure.")
             else:
-                res, data = self.browser["accounts/login/"](username=username, password=password, next="", _raw=True)
+                res, data = self.browser[u"accounts/login/"](username=username, password=password, next=u"", _raw=True)
                 home_content = data
 
         if auto_init:
@@ -1047,12 +1068,12 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
     @staticmethod
     def _get_globals_by_home(content):
-        START_TAG = '<script type="text/javascript">'
-        END_TAG = '</script>'
+        START_TAG = u'<script type="text/javascript">'
+        END_TAG = u'</script>'
 
         while START_TAG in content:
             source, sep, content = content.partition(START_TAG)[2].partition(END_TAG)
-            if "(" in source or ")" in source or not sep:
+            if u"(" in source or u")" in source or not sep:
                 # function call, or EOF found while parsing.
                 continue
 
@@ -1061,28 +1082,30 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
                 if not line:
                     continue
 
-                key, sep, value = line.partition(" = ")
-                if sep and key.startswith("var "):
-                    key = key[len("var "):]
-                    if value.endswith(";"):
-                        value = value[:-len(";")]
+                key, sep, value = line.partition(u" = ")
+                if sep and key.startswith(u"var "):
+                    key = key[len(u"var "):]
+                    if value.endswith(u";"):
+                        value = value[:-len(u";")]
                     else:
                         # TODO: support multi line config.
-                        value = "null"
+                        value = u"null"
                 else:
                     continue
 
                 # XXX for MEDIA_URL.
-                if value.startswith("'") and value.endswith("'"):
-                    assert '"' not in value
-                    value = '"{}"'.format(value[+1:-1])
+                if value.startswith(u"'") and value.endswith(u"'"):
+                    assert u'"' not in value
+                    value = u'"{}"'.format(value[+1:-1])
 
                 value = json.loads(value)
                 yield key, value
 
-    def init(self, share_id=None, *, home_content=None):
+    def init(self, share_id=None, **_3to2kwargs):
+        if 'home_content' in _3to2kwargs: home_content = _3to2kwargs['home_content']; del _3to2kwargs['home_content']
+        else: home_content = None
         try:
-            url = "get_initialization_data"
+            url = u"get_initialization_data"
             data = dict(
                 client_version=self.client_version,
             )
@@ -1090,20 +1113,20 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             if share_id is not None:
                 data.update(share_id=share_id)
 
-            url += "?" + urlencode(data)
+            url += u"?" + urlencode(data)
             res, data = self.browser[url]()
             # self.browser["get_initialization_data"]
-        except HTTPError as e:
+        except HTTPError, e:
             if e.code == 404:
                 self.inited = False
-                raise WFLoginError("Login Failure.")
+                raise WFLoginError(u"Login Failure.")
             else:
                 raise
 
         self.clear()
 
         if home_content is None:
-            _, home_content = self.browser[""](_raw=True)
+            _, home_content = self.browser[u""](_raw=True)
         self.globals.update(self._get_globals_by_home(home_content))
 
         data = attrdict(data)
@@ -1125,7 +1148,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         status.polling_interval = mp.initialPollingIntervalInMs / 1000
         status.is_readonly = mp.isReadOnly
 
-        if mp.get("shareType"):
+        if mp.get(u"shareType"):
             status.share_type = mp.shareType
             status.share_id = mp.shareId
         else:
@@ -1161,13 +1184,13 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
     def check_exist_node(self, node):
         original_node = self.nodes.get(node.id)
         if original_node is None:
-            raise WFNodeError("{!r} is not exists.".format(node))
+            raise WFNodeError(u"{!r} is not exists.".format(node))
         elif original_node is not node:
-            raise WFNodeError("{!r} is invalid node.".format(node))
+            raise WFNodeError(u"{!r} is invalid node.".format(node))
 
     def check_not_exist_node(self, node):
         if node.id in self.nodes:
-            raise WFNodeError("{!r} is already exists.".format(node))
+            raise WFNodeError(u"{!r} is already exists.".format(node))
 
     # TODO: make node manger.
     # TODO: add __getitem__, __contains__, etc.
@@ -1185,7 +1208,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         if node.parent is not None:
             self.check_exist_node(node.parent)
             if node in node.parent:
-                raise WFNodeError("node are still exists in parent node.")
+                raise WFNodeError(u"node are still exists in parent node.")
 
         nodes = self.nodes
         if not recursion_delete:
@@ -1206,16 +1229,16 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
         self.check_not_exist_node(node)
 
     def _handle_errors_by_push_poll(self, data):
-        error = data.get("error")
+        error = data.get(u"error")
         if error:
             raise WFError(error)
 
-        logged_out = data.get("logged_out")
+        logged_out = data.get(u"logged_out")
         if logged_out:
-            raise WFLoginError("logout detected, don't share session with real user.")
+            raise WFLoginError(u"logout detected, don't share session with real user.")
 
     def _status_update_by_push_poll(self, data):
-        results = data.get("results")
+        results = data.get(u"results")
         if results is None:
             return
 
@@ -1226,7 +1249,7 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
             status.most_recent_operation_transaction_id = res.new_most_recent_operation_transaction_id
             datas.append(json.loads(res.server_run_operation_transaction_json))
 
-            if res.get("need_refreshed_project_tree"):
+            if res.get(u"need_refreshed_project_tree"):
                 raise NotImplementedError
                 self._refresh_project_tree()
                 # XXX how to execute operation after refresh project tree? no idea.
@@ -1267,10 +1290,10 @@ class Workflowy(BaseWorkflowy, WFOperationCollection):
 
         if self.status.share_type is not None:
             # how to merge code with WFClientTransaction.get_transaction_json()
-            assert self.status.share_type == "url"
+            assert self.status.share_type == u"url"
             arguments.update(share_id=self.status.share_id)
 
-        res, data = self.browser["push_and_poll"](**arguments)
+        res, data = self.browser[u"push_and_poll"](**arguments)
         return data
 
     def _execute_server_transaction(self, tr, data):
@@ -1288,12 +1311,12 @@ class WeakWorkflowy(Workflowy):
             _wf = self
 
         self.NODE_CLASS = _WFNode_
-        super().__init__()
+        super(WeakWorkflowy, self).__init__()
 
 def _collect_operation():
     for key, value in globals().items():
         if isinstance(value, type) and issubclass(value, WFOperation):
-            if not key.startswith("_"):
+            if not key.startswith(u"_"):
                 yield value.operation_name, value
 
 OPERATOR_COLLECTION.update(_collect_operation())
