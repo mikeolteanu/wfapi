@@ -35,7 +35,6 @@ OPERATOR_COLLECTION = {}
 # WFOperation collection.
 
 def gen_uuid():
-    print binascii.hexlify(os.urandom(16))
     return unicode(uuid.UUID(binascii.hexlify(os.urandom(16))))
 
 IDENTIFY_TID = string.digits + string.ascii_letters
