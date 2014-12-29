@@ -655,11 +655,12 @@ class WFNode(WFBaseNode):
 
     def find_child_node_by_id(self, node_id):
         if self.id == node_id:
-            yield self
+            return self
         for child in self:
-            results = child.find_child_node_by_id(node_id)
-            for result in results:
-                yield result
+            result = child.find_child_node_by_id(node_id)
+            if result != None:
+                return result
+        return None
 
     def find_child_node_by_exact_content(self, content):
         if self.nm == content:
