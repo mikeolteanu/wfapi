@@ -668,14 +668,14 @@ class WFNode(WFBaseNode):
         if is_empty_root:
             print u"[*]" + u"Home"
         else:
-            print str(self.cp) + str(self.nm) + str(self.id)
+            print str(indent*" ") + ("[x]" if self.cp != None else "[ ]") + " - " + str(self.nm) # + " - " + str(self.id)
 
         for line in self.no.splitlines():
-            print line
+            print str((indent+6)*" ") + str(line)
 
         indent += INDENT_SIZE
         for child in self:
-            child.pretty_print(indent=indent)
+            child.pretty_print(indent=indent+1)
 
     @classmethod
     def from_json(cls, data, parent=None):
