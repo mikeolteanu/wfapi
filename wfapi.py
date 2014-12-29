@@ -582,10 +582,10 @@ class WFNode(WFBaseNode):
             id = unicode(id)
 
         self.id = id # UUID or "None"(DEFAULT_ROOT_NODE_ID)
-        self.lm = lm # ?
-        self.nm = nm # key
-        self.ch = ch # children
-        self.no = no # content
+        self.lm = lm # Last modified time
+        self.nm = nm # Content
+        self.ch = ch # children list
+        self.no = no # Sub content
         self.cp = cp # complete marking time. (cp is None -> uncompleted, is not None -> completed)
         self.shared = shared
         self.parent = parent
@@ -652,6 +652,30 @@ class WFNode(WFBaseNode):
                 raise IndexError(item)
 
         return self.ch[item]
+
+    def find_child_node_by_id(self, node_id):
+        if self.id == node_id:
+            yield self
+        for child in self:
+            results = child.find_child_node_by_id(node_id)
+            for result in results:
+                yield result
+
+    def find_child_node_by_exact_content(self, content):
+        if self.nm == content:
+            yield self
+        for child in self:
+            results = child.find_child_node_by_exact_content(content)
+            for result in results:
+                yield result
+
+    def find_child_node_by_substring(self, substring):
+        if substring in self.nm or substring in self.no:
+            yield self
+        for child in self:
+            results = child.find_child_node_by_substring(substring)
+            for result in results:
+                yield result
 
     def pretty_print(self, **_3to2kwargs):
         if 'indent' in _3to2kwargs: indent = _3to2kwargs['indent']; del _3to2kwargs['indent']
